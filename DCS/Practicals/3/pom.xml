@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.dcs</groupId>
+    <artifactId>corba-student</artifactId>
+    <version>1.0</version>
+
+    <properties>
+        <!-- Builds and runs on JDK 17 and JDK 21 (JDK 8 is NOT needed) -->
+        <maven.compiler.release>17</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+
+        <!-- CORBA API (org.omg.*) - removed from the JDK since Java 11 -->
+        <dependency>
+            <groupId>org.glassfish.corba</groupId>
+            <artifactId>glassfish-corba-omgapi</artifactId>
+            <version>4.2.4</version>
+        </dependency>
+
+        <!-- CORBA ORB -->
+        <dependency>
+            <groupId>org.glassfish.corba</groupId>
+            <artifactId>glassfish-corba-orb</artifactId>
+            <version>4.2.4</version>
+        </dependency>
+
+        <!-- GMBAL 4.0.2 (pulled in by the ORB) has no switch for the Java 17+
+             "Multiple upper bounds" crash; 4.0.3 honours the
+             -Dorg.glassfish.gmbal.no.multipleUpperBoundsException=true flag -->
+        <dependency>
+            <groupId>org.glassfish.gmbal</groupId>
+            <artifactId>gmbal</artifactId>
+            <version>4.0.3</version>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+
+        <plugins>
+
+            <!-- Generate Java code from Student.idl -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>idlj-maven-plugin</artifactId>
+                <version>1.2.2</version>
+
+                <configuration>
+                    <compiler>glassfish</compiler>
+
+                    <sourceDirectory>
+                        ${project.basedir}/src/main/idl
+                    </sourceDirectory>
+
+                    <outputDirectory>
+                        ${project.build.directory}/generated-sources/idl
+                    </outputDirectory>
+
+                    <sources>
+                        <source>
+
+                            <includes>
+                                <include>Student.idl</include>
+                            </includes>
+
+                            <!-- Generate client-side code -->
+                            <emitStubs>true</emitStubs>
+
+                            <!-- Generate server-side skeleton -->
+                            <emitSkeletons>true</emitSkeletons>
+
+                        </source>
+                    </sources>
+
+                    <failOnError>true</failOnError>
+                </configuration>
+
+                <executions>
+                    <execution>
+                        <id>generate-corba-sources</id>
+
+                        <phase>generate-sources</phase>
+
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+
+                <dependencies>
+
+                    <dependency>
+                        <groupId>org.glassfish.corba</groupId>
+                        <artifactId>idlj</artifactId>
+                        <version>4.2.4</version>
+                    </dependency>
+
+                </dependencies>
+            </plugin>
+
+            <!-- Add generated sources -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+
+                <executions>
+
+                    <execution>
+
+                        <id>add-generated-sources</id>
+
+                        <phase>generate-sources</phase>
+
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+
+                        <configuration>
+
+                            <sources>
+                                <source>
+                                    ${project.build.directory}/generated-sources/idl
+                                </source>
+                            </sources>
+
+                        </configuration>
+
+                    </execution>
+
+                </executions>
+
+            </plugin>
+
+            <!-- Java compiler: release 17 works on both JDK 17 and JDK 21 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+
+                    <!-- Skip the ORB's own annotation processor (it only
+                         supports Java 8 source level and just prints a warning) -->
+                    <proc>none</proc>
+                </configuration>
+
+            </plugin>
+
+            <!--
+              Run server / client in a separate JVM so the add-opens JVM flags
+              the GlassFish ORB (GMBAL) needs on Java 17+ are applied:
+
+                mvn compile exec:exec@server
+                mvn compile exec:exec@client
+
+              ${java.home} is the JDK that is running Maven (17 or 21).
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+
+                <configuration>
+                    <executable>${java.home}/bin/java</executable>
+                    <workingDirectory>${project.basedir}</workingDirectory>
+                </configuration>
+
+                <executions>
+
+                    <execution>
+                        <id>server</id>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>
+                                <argument>-Dorg.glassfish.gmbal.no.multipleUpperBoundsException=true</argument>
+                                <argument>--add-opens=java.base/java.lang=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/java.io=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/java.util=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/java.net=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/java.nio=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/sun.nio.ch=ALL-UNNAMED</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>StudentServer</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+
+                    <execution>
+                        <id>client</id>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>
+                                <argument>-Dorg.glassfish.gmbal.no.multipleUpperBoundsException=true</argument>
+                                <argument>--add-opens=java.base/java.lang=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/java.io=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/java.util=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/java.net=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/java.nio=ALL-UNNAMED</argument>
+                                <argument>--add-opens=java.base/sun.nio.ch=ALL-UNNAMED</argument>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>StudentClient</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+
+                </executions>
+            </plugin>
+
+        </plugins>
+
+    </build>
+
+</project>

@@ -1,0 +1,15 @@
+module StudentModule {
+
+    interface Student {
+
+        string getStudentName(in long rollNo);
+
+        string getBranch(in long rollNo);
+
+        // Store one student's details on the server
+        void addStudent(in long rollNo, in string name, in string branch);
+
+        // Ask the server to print every stored student
+        void showAll();
+    };
+};
